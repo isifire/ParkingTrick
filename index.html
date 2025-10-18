@@ -1,0 +1,233 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<title>Generador de códigos de parking</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<link rel="preconnect" href="https://cdn.jsdelivr.net">
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
+<style>
+  :root{
+    --bg:#0f1115; --panel:#171923; --panel-2:#0b0d12;
+    --fg:#e6e6e6; --muted:#a8b3cf; --accent:#4da3ff; --ok:#6cf96c;
+    --border:#252a37;
+    --prefijo:#4da3ff;   /* azul */
+    --descuento:#6cf96c; /* verde */
+    --fecha:#ffb347;     /* naranja suave */
+    --padding:#bfbfbf;   /* gris claro */
+  }
+  *{box-sizing:border-box}
+  body{margin:0; font-family:system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,sans-serif; background:var(--bg); color:var(--fg);}
+  .container{max-width:880px; margin:32px auto; padding:0 16px;}
+  header{margin-bottom:16px;}
+  h1{font-size:clamp(18px,3vw,22px); margin:0 0 6px 0; font-weight:700;}
+  .sub{color:var(--muted); font-size:.95rem; margin:0;}
+  .grid{display:grid; grid-template-columns:1fr; gap:14px;}
+  @media(min-width:720px){ .grid{grid-template-columns: 1.1fr .9fr;} }
+
+  .card{background:var(--panel); border:1px solid var(--border); border-radius:14px; padding:14px;}
+  .stack{display:grid; gap:10px;}
+  label{font-size:.92rem; color:var(--muted); text-align:left;}
+  input,select,button{
+    width:100%; padding:12px 12px; font-size:1rem; border-radius:10px; border:1px solid var(--border);
+    background:#0f1220; color:var(--fg); outline:none;
+  }
+  input[type="date"]{background:#121528;}
+  button.primary{background:var(--accent); color:#071018; font-weight:700; border-color:transparent; cursor:pointer;}
+  button.secondary{background:#1f2433; color:var(--fg); cursor:pointer;}
+  .btn-row{display:flex; gap:10px; flex-wrap:wrap;}
+  .field-row{display:grid; grid-template-columns:1fr 1fr; gap:10px;}
+  .hint{color:var(--muted); font-size:.88rem; margin-top:6px;}
+
+  .result-card{background:var(--panel-2); border:1px solid var(--border); border-radius:14px; padding:16px;}
+  .result{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; background:#0b0e1a; border:1px dashed var(--border);
+          padding:12px; border-radius:10px;}
+  .kv{display:grid; grid-template-columns: 170px 1fr; gap:8px 12px; margin-top:6px;}
+  .kv b{font-weight:600; color:#cfd6ea;}
+  .code-big{display:block; margin-top:10px; font-size:clamp(18px,3.4vw,24px); color:var(--ok);}
+
+  .barcode-wrap{
+    background:#fff; border-radius:12px; padding:18px; margin-top:18px;
+    display:flex; align-items:center; justify-content:center;
+    border:1px solid #e6e6e6;
+  }
+  svg{width:100%; height:auto; max-width:680px; display:block;}
+  .parts{
+    margin-top:14px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;
+    background:#0b0e1a;
+    border:1px dashed var(--border);
+    border-radius:10px;
+    padding:10px 12px;
+  }
+  .segline{display:flex; gap:8px; flex-wrap:wrap; align-items:center; justify-content:center;}
+  .seg{
+    padding:6px 10px;
+    border-radius:8px;
+    box-shadow:0 0 0 1px rgba(255,255,255,.06) inset;
+    font-size:clamp(13px,2.8vw,16px);
+  }
+  .seg.prefijo{background:rgba(77,163,255,.12); color:var(--prefijo);}
+  .seg.descuento{background:rgba(108,249,108,.10); color:var(--descuento);}
+  .seg.fecha{background:rgba(255,179,71,.12); color:var(--fecha);}
+  .seg.padding{background:rgba(191,191,191,.12); color:var(--padding);}
+  .legend{margin-top:8px; color:var(--muted); font-size:.92rem; text-align:center;}
+  .legend b{color:#cfd6ea; font-weight:600;}
+  footer{margin-top:18px; color:var(--muted); font-size:.85rem; text-align:center;}
+</style>
+</head>
+<body>
+  <div class="container">
+    <header>
+      <h1>Generador de códigos de parking</h1>
+      <p class="sub">Estructura: <code>5</code> + <code>nºDescuento(11d)</code> + <code>díasDesde2008(4d)</code> + <code>0000</code></p>
+    </header>
+
+    <div class="grid">
+      <section class="card stack">
+        <div class="field-row">
+          <div>
+            <label for="fecha">Fecha de caducidad</label>
+            <input type="date" id="fecha" value="2025-10-20">
+          </div>
+          <div>
+            <label for="modo">Modo</label>
+            <select id="modo">
+              <option value="realista" selected>Realista (secuencial)</option>
+              <option value="explorar">Explorar (aleatorio)</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field-row">
+          <div>
+            <label for="jitter">Jitter (±N) - modo explorar</label>
+            <input type="number" id="jitter" min="0" step="1" value="12">
+          </div>
+          <div>
+            <label for="contador">Contador actual</label>
+            <input type="number" id="contador" min="0" step="1" value="0" disabled>
+          </div>
+        </div>
+
+        <div class="btn-row">
+          <button class="primary" id="genBtn" type="button">Generar código</button>
+          <button class="secondary" id="resetBtn" type="button">Reset contador</button>
+        </div>
+        <div class="hint">Consejo: si el código de barras te queda muy grande en móvil, prueba a girar el teléfono apaisado.</div>
+      </section>
+
+      <section class="result-card">
+        <div id="result" class="result">— sin generar aún —</div>
+        <div class="barcode-wrap">
+          <svg id="barcode" aria-label="Código de barras"></svg>
+        </div>
+        <div class="parts" id="parts" aria-live="polite">
+          <div class="segline">
+            <span class="seg prefijo">[5]</span>
+            <span class="seg descuento">[???????????]</span>
+            <span class="seg fecha">[????]</span>
+            <span class="seg padding">[0000]</span>
+          </div>
+          <div class="legend">
+            <b>Prefijo (1)</b> &nbsp;|&nbsp; <b>Nº Descuento (11)</b> &nbsp;|&nbsp; <b>Fecha (4)</b> &nbsp;|&nbsp; <b>Padding (4)</b>
+          </div>
+        </div>
+      </section>
+    </div>
+
+ 
+  </div>
+
+<script>
+// Modelo lineal base
+const slope = 25.181818;
+const intercept = 19875433.91;
+const epoch = new Date(2008, 0, 1);
+
+const $ = (id)=>document.getElementById(id);
+
+function daysSinceEpoch(date) {
+  return Math.floor((date - epoch) / (1000*60*60*24));
+}
+function predictDiscount(date) {
+  const days = daysSinceEpoch(date);
+  return Math.round(slope * days + intercept);
+}
+function pad(n, width) {
+  const s = String(n);
+  return s.length >= width ? s : "0".repeat(width - s.length) + s;
+}
+function loadContador() {
+  const v = localStorage.getItem("contador_simple");
+  return v ? parseInt(v,10) : 0;
+}
+function saveContador(val) {
+  localStorage.setItem("contador_simple", String(val));
+  $("contador").value = val;
+}
+function resetContador() {
+  saveContador(0);
+  $("result").innerHTML = "Contador reiniciado.";
+  try { JsBarcode("#barcode", "", {displayValue:false}); } catch(e) {}
+  $("parts").querySelector(".seg.descuento").textContent = "[???????????]";
+  $("parts").querySelector(".seg.fecha").textContent = "[????]";
+}
+
+function generar() {
+  const fechaStr = $("fecha").value;
+  if (!fechaStr) return;
+
+  const modo = $("modo").value;
+  const jitterMax = parseInt($("jitter").value || "0",10);
+
+  const d = new Date(fechaStr+"T00:00:00");
+  const days = daysSinceEpoch(d);
+  const base = predictDiscount(d);
+
+  let ctr = loadContador();
+  let jitter = 0;
+  if (modo==="explorar" && jitterMax>0) {
+    jitter = Math.floor(Math.random()*(2*jitterMax+1))-jitterMax;
+  }
+
+  const middleInt = base + ctr + jitter;
+  const middleStr = pad(middleInt,11); // 11 dígitos reales
+  const dateBlock = pad(days,4);
+  const code = "5" + middleStr + dateBlock + "0000";
+
+  $("result").innerHTML = `
+  <div class="kv">
+    <b>Fecha:</b> <span>${fechaStr}</span>
+    <b>Días desde 2008:</b> <span>${days}</span>
+    <b>Contador:</b> <span>${ctr}${modo==='explorar'?` &nbsp;|&nbsp; Jitter: ${jitter}`:''}</span>
+  </div>
+  <span class="code-big">${code}</span>
+  `;
+
+  JsBarcode("#barcode", code, {
+    format:"CODE128",
+    lineColor:"#000",
+    width:2,
+    height:92,
+    displayValue:true,
+    fontSize:16,
+    textMargin:10,
+    margin:0
+  });
+
+  $("parts").querySelector(".seg.prefijo").textContent = `[5]`;
+  $("parts").querySelector(".seg.descuento").textContent = `[${middleStr}]`;
+  $("parts").querySelector(".seg.fecha").textContent = `[${dateBlock}]`;
+  $("parts").querySelector(".seg.padding").textContent = `[0000]`;
+
+  ctr += 1;
+  saveContador(ctr);
+}
+
+$("genBtn").addEventListener("click", generar);
+$("resetBtn").addEventListener("click", resetContador);
+saveContador(loadContador());
+</script>
+</body>
+</html>
