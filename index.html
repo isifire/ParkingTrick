@@ -80,7 +80,7 @@
   <div class="container">
     <header>
       <h1>Generador de códigos de parking</h1>
-      <p class="sub">Estructura: <code>5</code> + <code>nºDescuento(11d)</code> + <code>díasDesde2008(4d)</code> + <code>0000</code></p>
+      <p class="sub">Estructura: <code>5</code> + <code>600200</code><code>NNNNN</code> + <code>díasDesde2008(4d)</code> + <code>0000</code></p>
     </header>
 
     <div class="grid">
@@ -125,12 +125,12 @@
         <div class="parts" id="parts" aria-live="polite">
           <div class="segline">
             <span class="seg prefijo">[5]</span>
-            <span class="seg descuento">[???????????]</span>
-            <span class="seg fecha">[????]</span>
+            <span class="seg descuento" id="seg-descuento">[600200NNNNN]</span>
+            <span class="seg fecha" id="seg-fecha">[DDDD]</span>
             <span class="seg padding">[0000]</span>
           </div>
           <div class="legend">
-            <b>Prefijo (1)</b> &nbsp;|&nbsp; <b>Nº Descuento (11)</b> &nbsp;|&nbsp; <b>Fecha (4)</b> &nbsp;|&nbsp; <b>Padding (4)</b>
+            <b>Prefijo (1)</b> &nbsp;|&nbsp; <b>Fijo 600200 + Contador (5)</b> &nbsp;|&nbsp; <b>Fecha (4)</b> &nbsp;|&nbsp; <b>Padding (4)</b>
           </div>
         </div>
       </section>
@@ -140,7 +140,7 @@
   </div>
 
 <script>
-// Modelo lineal base
+// Modelo lineal base (derivado de dos vales reales)
 const slope = 25.181818;
 const intercept = 19875433.91;
 const epoch = new Date(2008, 0, 1);
@@ -150,7 +150,8 @@ const $ = (id)=>document.getElementById(id);
 function daysSinceEpoch(date) {
   return Math.floor((date - epoch) / (1000*60*60*24));
 }
-function predictDiscount(date) {
+function predictFull(date) {
+  // Devuelve algo del estilo 20039015; usaremos SOLO sus 5 últimas cifras como contador base
   const days = daysSinceEpoch(date);
   return Math.round(slope * days + intercept);
 }
@@ -170,8 +171,8 @@ function resetContador() {
   saveContador(0);
   $("result").innerHTML = "Contador reiniciado.";
   try { JsBarcode("#barcode", "", {displayValue:false}); } catch(e) {}
-  $("parts").querySelector(".seg.descuento").textContent = "[???????????]";
-  $("parts").querySelector(".seg.fecha").textContent = "[????]";
+  $("seg-descuento").textContent = "[600200NNNNN]";
+  $("seg-fecha").textContent = "[DDDD]";
 }
 
 function generar() {
@@ -183,17 +184,21 @@ function generar() {
 
   const d = new Date(fechaStr+"T00:00:00");
   const days = daysSinceEpoch(d);
-  const base = predictDiscount(d);
-
+  const baseFull = predictFull(d);     // p.ej., 20039015
+  const baseCounter = Math.abs(baseFull) % 100000; // 5 últimas cifras
   let ctr = loadContador();
   let jitter = 0;
   if (modo==="explorar" && jitterMax>0) {
     jitter = Math.floor(Math.random()*(2*jitterMax+1))-jitterMax;
   }
 
-  const middleInt = base + ctr + jitter;
-  const middleStr = pad(middleInt,11); // 11 dígitos reales
-  const dateBlock = pad(days,4);
+  // Contador final en 5 dígitos (0..99999)
+  let counter = (baseCounter + ctr + jitter) % 100000;
+  if (counter < 0) counter += 100000;
+  const counterStr = pad(counter,5);
+
+  const middleStr = "600200" + counterStr;  // 11 dígitos: 600200 + NNNNN
+  const dateBlock = pad(days,4);            // DDDD
   const code = "5" + middleStr + dateBlock + "0000";
 
   $("result").innerHTML = `
@@ -216,10 +221,8 @@ function generar() {
     margin:0
   });
 
-  $("parts").querySelector(".seg.prefijo").textContent = `[5]`;
-  $("parts").querySelector(".seg.descuento").textContent = `[${middleStr}]`;
-  $("parts").querySelector(".seg.fecha").textContent = `[${dateBlock}]`;
-  $("parts").querySelector(".seg.padding").textContent = `[0000]`;
+  $("seg-descuento").textContent = "[" + middleStr + "]";
+  $("seg-fecha").textContent = "[" + dateBlock + "]";
 
   ctr += 1;
   saveContador(ctr);
